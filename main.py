@@ -1,54 +1,54 @@
 import pyupbit
 import pandas as pd
+from datetime import datetime
+import time
 
-def calculate_target_price(ticker):
-    """
-    Calculates the target price based on the Volatility Breakout Strategy.
-    Target Price = Today's Open + (Yesterday's High - Yesterday's Low) * K
-    """
-    # Fetch Daily OHLCV (Open, High, Low, Close, Volume) data
-    # count=2 retrieves data for yesterday and today
-
-    df = pyupbit.get_ohlcv(ticker, interval="day", count=2)
-
-    if df is None or len(df) < 2:
-        print(f"Error: Could not retrieve data for {ticker}")
+def get_target_price(ticker):
+    """Calculate the target price for a given ticker."""
+    try:
+        df = pyupbit.get_ohlcv(ticker, interval="day", count=2)
+        if df is None or len(df) < 2:
+            return None
+        
+        yesterday = df.iloc[0]
+        today = df.iloc[1]
+        
+        # Volatility Range = Yesterday's High - Yesterday's Low
+        target_price = today['open'] + (yesterday['high'] - yesterday['low']) * 0.5
+        return target_price
+    except Exception as e:
+        print(f"Error calculating target for {ticker}: {e}")
         return None
+
+def scan_market():
+    # Fetch top 10 tickers by trading volume (proxy for market cap/liquidity in KRW market)
+    tickers = pyupbit.get_tickers(fiat="KRW")[:10]
     
-    yesterday = df.iloc[0]
-    today = df.iloc[1]
-
-    # Calculate range ( Valotility of th eprevious day)
-    # Range = High - Low
-    prev_range = yesterday['high'] - yesterday['low']
-
-    # K-value is usually set to 0.5 as a standard
-    k = 0.5
-    target_price = today['open'] + (prev_range * k)
+    # Get current timestamp for the dashboard
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    return target_price
+    print(f"\n" + "="*55)
+    print(f" CRYPTO MONITORING DASHBOARD | {now}")
+    print("="*55)
+    print(f"{'Ticker':<12} | {'Target':>12} | {'Current':>12} | {'Status'}")
+    print("-"*55)
 
-def monitor_market():
-    ticker = "KRW-BTC"
-    target_price = calculate_target_price(ticker)
-    current_price = pyupbit.get_current_price(ticker)
+    for ticker in tickers:
+        target = get_target_price(ticker)
+        current = pyupbit.get_current_price(ticker)
+        
+        if target is None or current is None:
+            continue
 
-    if target_price is None or current_price is None:
-        return
-
-    print("=" * 40)
-    print(f" Market Monitoring: {ticker}")
-    print("=" * 40)
-    print(f" Target Price  : {target_price:,.0f} KRW")
-    print(f" Current Price : {current_price:,.0f} KRW")
-    print("-" * 40)
-
-    if current_price >= target_price:
-        print(" Status: [SIGNAL] Breakout detected! Consider Buying.")
-    else:
-        gap = target_price - current_price
-        print(f" Status: [WAIT] {gap:,.0f} KRW below target.")
-    print("=" * 40)
+        status = "🟢 [BUY]" if current >= target else "⚪ [WAIT]"
+        
+        # Display formatted results
+        print(f"{ticker:<12} | {target:>12,.0f} | {current:>12,.0f} | {status}")
+        
+        # Optional: Sleep briefly to avoid API rate limits
+        time.sleep(0.05)
+    
+    print("="*55)
 
 if __name__ == "__main__":
-    monitor_market()
+    scan_market()
